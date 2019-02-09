@@ -12,3 +12,15 @@ dependencies {
 
 }
 
+mainClassName = "org.usfirst.frc.team3021.coprocessor.Main"
+
+
+jar { 
+  manifest {
+    attributes(
+      'Main-Class': "$mainClassName"
+	)
+  }
+  from configurations.compile.collect { entry -> zipTree(entry) }  
+}
+
