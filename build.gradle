@@ -4,15 +4,15 @@ plugins {
 	id "application"
 }
 
+mainClassName = "org.usfirst.frc.team3021.coprocessor.Main"
+
 repositories {
-    jcenter()
+    mavenCentral()
 }
 
 dependencies {
 
 }
-
-mainClassName = "org.usfirst.frc.team3021.coprocessor.Main"
 
 
 jar { 
@@ -24,3 +24,6 @@ jar {
   from configurations.compile.collect { entry -> zipTree(entry) }  
 }
 
+wrapper {
+    gradleVersion = '5.0'
+}
