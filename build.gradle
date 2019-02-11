@@ -1,3 +1,6 @@
+import org.gradle.internal.os.OperatingSystem
+
+
 plugins {
 	id "java"
 	id "eclipse"
@@ -7,23 +10,40 @@ plugins {
 mainClassName = "org.usfirst.frc.team3021.coprocessor.Main"
 
 repositories {
-    mavenCentral()
+	mavenLocal()
+	gradlePluginPortal()
+        
+	String frcYear = '2019'
+	File frcHome
+
+	if (OperatingSystem.current().isWindows()) {
+		String publicFolder = System.getenv('PUBLIC')
+		if (publicFolder == null) {
+			publicFolder = "C:\\Users\\Public"
+		}
+		frcHome = new File(publicFolder, "frc${frcYear}")
+	} else {
+		def userFolder = System.getProperty("user.home")
+		frcHome = new File(userFolder, "frc${frcYear}")
+	}
+
+	def frcHomeMaven = new File(frcHome, 'maven')
+        
+	maven {
+		name 'frcHome'
+		url frcHomeMaven
+	}
+
+	mavenCentral()
 }
 
 dependencies {
-
+    implementation 'edu.wpi.first.wpilibj:wpilibj-java:2019.1.1'
+    implementation 'edu.wpi.first.ntcore:ntcore-java:2019.1.1'
+    implementation 'edu.wpi.first.wpiutil:wpiutil-java:2019.1.1'
+    implementation 'edu.wpi.first.thirdparty.frc2019.opencv:opencv-java:3.4.4-4'
+    implementation 'edu.wpi.first.cscore:cscore-java:2019.1.1'
+    implementation 'edu.wpi.first.cameraserver:cameraserver-java:2019.1.1'
+    implementation 'edu.wpi.first.hal:hal-java:2019.1.1'
 }
 
-
-jar { 
-  manifest {
-    attributes(
-      'Main-Class': "$mainClassName"
-	)
-  }
-  from configurations.compile.collect { entry -> zipTree(entry) }  
-}
-
-wrapper {
-    gradleVersion = '5.0'
-}
