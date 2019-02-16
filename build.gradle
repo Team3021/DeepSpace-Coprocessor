@@ -7,7 +7,7 @@ plugins {
 	id "application"
 }
 
-mainClassName = "org.usfirst.frc.team3021.coprocessor.Main"
+mainClassName = "org.usfirst.frc.team3021.coprocessor.main.Main"
 
 repositories {
 	mavenLocal()
@@ -38,12 +38,21 @@ repositories {
 }
 
 dependencies {
-    implementation 'edu.wpi.first.wpilibj:wpilibj-java:2019.1.1'
-    implementation 'edu.wpi.first.ntcore:ntcore-java:2019.1.1'
-    implementation 'edu.wpi.first.wpiutil:wpiutil-java:2019.1.1'
-    implementation 'edu.wpi.first.thirdparty.frc2019.opencv:opencv-java:3.4.4-4'
-    implementation 'edu.wpi.first.cscore:cscore-java:2019.1.1'
-    implementation 'edu.wpi.first.cameraserver:cameraserver-java:2019.1.1'
-    implementation 'edu.wpi.first.hal:hal-java:2019.1.1'
+    compile 'edu.wpi.first.wpilibj:wpilibj-java:2019.1.1'
+    compile 'edu.wpi.first.ntcore:ntcore-java:2019.1.1'
+    compile 'edu.wpi.first.wpiutil:wpiutil-java:2019.1.1'
+    compile 'edu.wpi.first.thirdparty.frc2019.opencv:opencv-java:3.4.4-4'
+    compile 'edu.wpi.first.cscore:cscore-java:2019.1.1'
+    compile 'edu.wpi.first.cameraserver:cameraserver-java:2019.1.1'
+    compile 'edu.wpi.first.hal:hal-java:2019.1.1'
 }
 
+
+jar { 
+  manifest {
+    attributes(
+      'Main-Class': "$mainClassName"
+	)
+  }
+  from configurations.compile.collect { entry -> zipTree(entry) }  
+}
