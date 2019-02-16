@@ -69,7 +69,7 @@ public class VisionSystem {
 		server = CameraServer.getInstance();
 		
 		// setup the mjpeg server to communicate with the smart dashboard
-		dashboardSink = new MjpegServer("Server 1", 1180);
+		dashboardSink = new MjpegServer("Vision Server 1", 1181);
 		server.addServer(dashboardSink);
 		
 		// set up a usb camera on port 0
