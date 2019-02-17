@@ -10,6 +10,7 @@ import org.opencv.core.Point;
 import org.opencv.core.RotatedRect;
 import org.opencv.imgproc.Imgproc;
 import org.usfirst.frc.team3021.coprocessor.main.IO;
+import org.usfirst.frc.team3021.coprocessor.network.NetworkTableManager;
 import org.usfirst.frc.team3021.coprocessor.processing.Drawing;
 import org.usfirst.frc.team3021.coprocessor.processing.Filtering;
 import org.usfirst.frc.team3021.coprocessor.processing.Targeting;
@@ -39,7 +40,6 @@ public class VisionProcessor extends RunnableDevice {
 	
 	private Mat image; 
 	private Mat processed;
-	private Mat targeted;
 	private boolean targetScopeEnabled = false;
 	private boolean targetLocatorEnabled = false;
 
@@ -54,7 +54,6 @@ public class VisionProcessor extends RunnableDevice {
 		// Mats are very memory intensive to construct
 		image = new Mat();
 		processed = new Mat();
-		targeted = new Mat();
 	}
 
 	public void setInput(VideoSource source) {
@@ -81,7 +80,7 @@ public class VisionProcessor extends RunnableDevice {
 		return targetLocatorEnabled;
 	}
 	
-	public Target findTarget(Mat image) {
+	public HatchTarget findTarget(Mat image) {
 		Filtering.grayscale(image, processed);
 	
 		Imgproc.Canny(processed, processed, 45, 50);
@@ -91,20 +90,7 @@ public class VisionProcessor extends RunnableDevice {
 		List<MatOfPoint> contoursFiltered = new ArrayList<>();
 		List<RotatedRect> rectangles = Filtering.getRotatedRectangles(contours, contoursFiltered);
 		
-		HatchTarget target = Targeting.getTarget(rectangles);
- 		List<RotatedRect> targets = target.getRotatedRects();
-		Drawing.drawRotatedRectangles(targeted, targets, true);
-		
-		double center_x = image.width() * 0.5 + TARGET_OFFSET_X;
-		double center_y = image.height() * 0.5 + TARGET_OFFSET_Y;
-		double dx = target.getCenter().x - center_x;
-		double dy = center_y - target.getCenter().y;
-		StringBuilder values = new StringBuilder();
-		values.append("(").append(dx).append(", ").append(dy).append(")");
-		String output = values.toString();
-		Drawing.drawText(targeted, new Point(30, image.height() - 30), output);
-		
-		return target;
+		return Targeting.getTarget(rectangles);
 	}
 	
 	@Override
@@ -122,19 +108,49 @@ public class VisionProcessor extends RunnableDevice {
 			return;
 		}
 
-		// Draw a target location on the image
-		if (isTargetLocatorEnabled()) {
+//		// Draw a target location on the image
+//		if (isTargetLocatorEnabled()) {
 //			targetLocator.draw(mat);
-		}
-
-		// Draw a target scope on the image
-		if (isTargetScopeEnabled()) {
+//		}
+//
+//		// Draw a target scope on the image
+//		if (isTargetScopeEnabled()) {
 //			targetScope.draw(mat);
-		}
+//		}
 
+		HatchTarget target = findTarget(image);
+		
+		if (target != null) {
+			double center_x = image.width() * 0.5 + TARGET_OFFSET_X;
+			double center_y = image.height() * 0.5 + TARGET_OFFSET_Y;
+			
+			// Image coordinates start in the top-left corner
+			double dx = target.getCenter().x - center_x;
+			double dy = center_y - target.getCenter().y;
+			
+			StringBuilder values = new StringBuilder();
+			values.append("(").append(dx).append(", ").append(dy).append(")");
+			String data = values.toString();
+			Drawing.drawText(image, new Point(30, image.height() - 30), data);
+
+			List<RotatedRect> targets = target.getRotatedRects();
+			Drawing.drawRotatedRectangles(image, targets, true);
+			
+			output.putFrame(image);
+			
+			NetworkTableManager.getInstance().write("TargetFound", "true");
+			NetworkTableManager.getInstance().write("dx", Double.toString(dx));
+			NetworkTableManager.getInstance().write("dy", Double.toString(dy));
+		}
+		else {
+			output.putFrame(image);
+			
+			NetworkTableManager.getInstance().write("TargetFound", "false");
+		}
+		
 		// Give the frame to the output
 		// Core.rotate(mat, mat, Core.ROTATE_90_COUNTERCLOCKWISE);
-		output.putFrame(image);
+		
 
 		delay(100);
 	}
