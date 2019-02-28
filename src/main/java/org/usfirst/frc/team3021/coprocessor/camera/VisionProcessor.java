@@ -3,23 +3,22 @@ package org.usfirst.frc.team3021.coprocessor.camera;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfPoint;
 import org.opencv.core.Point;
 import org.opencv.core.RotatedRect;
 import org.opencv.imgproc.Imgproc;
-import org.usfirst.frc.team3021.coprocessor.main.IO;
 import org.usfirst.frc.team3021.coprocessor.network.NetworkTableManager;
 import org.usfirst.frc.team3021.coprocessor.processing.Drawing;
 import org.usfirst.frc.team3021.coprocessor.processing.Filtering;
 import org.usfirst.frc.team3021.coprocessor.processing.Targeting;
 import org.usfirst.frc.team3021.coprocessor.target.HatchTarget;
-import org.usfirst.frc.team3021.coprocessor.target.Target;
 import org.usfirst.frc.team3021.robot.device.RunnableDevice;
 
 import edu.wpi.cscore.CvSink;
 import edu.wpi.cscore.CvSource;
+import edu.wpi.cscore.MjpegServer;
+import edu.wpi.cscore.UsbCamera;
 import edu.wpi.cscore.VideoSource;
 import edu.wpi.first.cameraserver.CameraServer;
 
@@ -34,8 +33,17 @@ public class VisionProcessor extends RunnableDevice {
 	private final String PREF_TARGET_SCOPE_ENABLED = "VisionProcessor.target.scope.enabled";
 	private final String PREF_TARGET_LOCATOR_ENABLED = "VisionProcessor.target.locator.enabled";
 	
+	private boolean isInitialized;
+	
+	private UsbCamera[] cams;
+	private int curCamNum;
+	
+	private CameraServer server;
+	
+	// MjpegServer is a video sink that takes images and sends them to the dashboard
+	private MjpegServer dashboardSink;
+	
 	private CvSink input; // Video sink that will receive images from the camera source
-
 	private CvSource output;
 	
 	private Mat image; 
@@ -43,7 +51,48 @@ public class VisionProcessor extends RunnableDevice {
 	private boolean targetScopeEnabled = false;
 	private boolean targetLocatorEnabled = false;
 
-	public VisionProcessor(VideoSource initialCam) {
+	// TODO What if this code starts before the RoboRio code and these values haven't been written yet? Would this configure itself incorrectly?
+	
+	public boolean init() {
+		if (isInitialized) {
+			return false;
+		}
+		
+		isInitialized = true;
+		
+		server = CameraServer.getInstance();
+		
+		// setup the mjpeg server to communicate with the smart dashboard
+		dashboardSink = new MjpegServer("Vision Server 1", 1181);
+		server.addServer(dashboardSink);
+		
+		boolean[] enabledCams = NetworkTableManager.readBooleanArray("Cameras Enabled", new boolean[0]);
+		cams = new UsbCamera[enabledCams.length];
+		
+		boolean isVisionEnabled = false;
+		
+		UsbCamera initialCam = null;
+		for (int i = 0; i < enabledCams.length; i++) {
+			if (enabledCams[i]) {
+				UsbCamera cam = new UsbCamera("Active USB Camera", i); // TODO Fix resource leak somehow?
+				cam.setFPS(20);
+				cam.setResolution(FRAME_WIDTH, FRAME_HEIGHT);
+				
+				cams[i] = cam;
+				if (initialCam == null)
+					initialCam = cam;
+				
+				isVisionEnabled = true;
+			}
+		}
+		
+		// Return immediately if no cameras are enabled
+		if (!isVisionEnabled || initialCam == null) {
+			System.out.println("WARNING: No cameras found or enabled!");
+			return false;
+		}
+		
+		
 		// Setup a CvSink. This will capture Mats from an external source
 		input = new CvSink("Camera Sink");
 		input.setSource(initialCam);
@@ -54,6 +103,9 @@ public class VisionProcessor extends RunnableDevice {
 		// Mats are very memory intensive to construct
 		image = new Mat();
 		processed = new Mat();
+		
+		play();
+		return true;
 	}
 
 	public void setInput(VideoSource source) {
@@ -95,7 +147,9 @@ public class VisionProcessor extends RunnableDevice {
 	
 	@Override
 	protected void runPeriodic() {
-
+		// Check which camera to use and switch if necessary
+		toggleCamera();
+		
 		// Grab a frame from the source camera
 		// If there is an error notify the output
 		if (input.grabFrame(image) == 0) {
@@ -103,7 +157,7 @@ public class VisionProcessor extends RunnableDevice {
 			output.notifyError(input.getError());
 
 			// skip the rest of the current iteration
-			System.out.println("Unable to grab frame.");
+			System.out.println("Unable to grab frame");
 			delay(50);
 			return;
 		}
@@ -138,14 +192,14 @@ public class VisionProcessor extends RunnableDevice {
 			
 			output.putFrame(image);
 			
-			NetworkTableManager.getInstance().write("TargetFound", "true");
-			NetworkTableManager.getInstance().write("dx", Double.toString(dx));
-			NetworkTableManager.getInstance().write("dy", Double.toString(dy));
+			NetworkTableManager.write("Target Found", "true");
+			NetworkTableManager.write("dx", Double.toString(dx));
+			NetworkTableManager.write("dy", Double.toString(dy));
 		}
 		else {
 			output.putFrame(image);
 			
-			NetworkTableManager.getInstance().write("TargetFound", "false");
+			NetworkTableManager.write("Target Found", "false");
 		}
 		
 		// Give the frame to the output
@@ -154,4 +208,30 @@ public class VisionProcessor extends RunnableDevice {
 
 		delay(100);
 	}
+	
+	private void toggleCamera() {
+		int switchingTo = (int) NetworkTableManager.readNumber("Current Camera", curCamNum);
+		if (switchingTo >= cams.length) {
+			System.out.println("WARNING: Attempted to switch to a camera ID out of bounds!");
+			NetworkTableManager.write("Current Camera", curCamNum);
+		}
+		else if (cams[switchingTo] == null) {
+			System.out.println("WARNING: Attempted to switch to a disabled camera!");
+			NetworkTableManager.write("Current Camera", curCamNum);
+		}
+		else if (switchingTo != curCamNum) {
+			curCamNum = switchingTo;
+			setInput(cams[switchingTo]);
+		}
+	}
+	
+	public boolean isCameraEnabled(int id, boolean defaultValue) {
+		boolean[] statuses = NetworkTableManager.readBooleanArray("Cameras Enabled", new boolean[0]);
+		if (id >= statuses.length)
+			return defaultValue;
+		else
+			return statuses[id];
+		
+	}
+	
 }
